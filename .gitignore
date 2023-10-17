@@ -8,14 +8,17 @@ memcached-1.4.15/memcached_debug*
 memcached-1.4.15/memcached
 
 memcached-1.4.15/config.h
+memcached-1.4.15/config.h.in
 memcached-1.4.15/config.h.in~
 memcached-1.4.15/config.log
 memcached-1.4.15/config.status
+memcached-1.4.15/configure
 memcached-1.4.15/configure~
 
 memcached-1.4.15/.cache/
 memcached-1.4.15/.deps/
 memcached-1.4.15/Makefile
+memcached-1.4.15/doc/Makefile
 memcached-1.4.15/autom4te.cache/
 memcached-1.4.15/compile_commands.json
 
