@@ -668,6 +668,7 @@ void threadlocal_stats_reset(void) {
         threads[ii].stats.delete_misses = 0;
         threads[ii].stats.incr_misses = 0;
         threads[ii].stats.decr_misses = 0;
+        threads[ii].stats.mult_misses = 0;
         threads[ii].stats.cas_misses = 0;
         threads[ii].stats.bytes_read = 0;
         threads[ii].stats.bytes_written = 0;
@@ -683,6 +684,7 @@ void threadlocal_stats_reset(void) {
             threads[ii].stats.slab_stats[sid].delete_hits = 0;
             threads[ii].stats.slab_stats[sid].incr_hits = 0;
             threads[ii].stats.slab_stats[sid].decr_hits = 0;
+            threads[ii].stats.slab_stats[sid].mult_hits = 0;
             threads[ii].stats.slab_stats[sid].cas_hits = 0;
             threads[ii].stats.slab_stats[sid].cas_badval = 0;
         }
@@ -708,6 +710,7 @@ void threadlocal_stats_aggregate(struct thread_stats *stats) {
         stats->delete_misses += threads[ii].stats.delete_misses;
         stats->decr_misses += threads[ii].stats.decr_misses;
         stats->incr_misses += threads[ii].stats.incr_misses;
+        stats->mult_misses += threads[ii].stats.mult_misses;
         stats->cas_misses += threads[ii].stats.cas_misses;
         stats->bytes_read += threads[ii].stats.bytes_read;
         stats->bytes_written += threads[ii].stats.bytes_written;
@@ -729,6 +732,8 @@ void threadlocal_stats_aggregate(struct thread_stats *stats) {
                 threads[ii].stats.slab_stats[sid].decr_hits;
             stats->slab_stats[sid].incr_hits +=
                 threads[ii].stats.slab_stats[sid].incr_hits;
+            stats->slab_stats[sid].mult_hits +=
+                threads[ii].stats.slab_stats[sid].mult_hits;
             stats->slab_stats[sid].cas_hits +=
                 threads[ii].stats.slab_stats[sid].cas_hits;
             stats->slab_stats[sid].cas_badval +=

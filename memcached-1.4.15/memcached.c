@@ -1116,11 +1116,17 @@ static void complete_incr_bin(conn *c) {
             }
         } else {
             pthread_mutex_lock(&c->thread->stats.mutex);
-            if (c->cmd == PROTOCOL_BINARY_CMD_INCREMENT) {
-                c->thread->stats.incr_misses++;
-            } else {
-                c->thread->stats.decr_misses++;
-            }
+			switch (c->cmd) {
+				case PROTOCOL_BINARY_CMD_INCREMENT:
+					c->thread->stats.incr_misses++;
+					break;
+				case PROTOCOL_BINARY_CMD_DECREMENT:
+					c->thread->stats.decr_misses++;
+					break;
+				case PROTOCOL_BINARY_CMD_MULT:
+					c->thread->stats.mult_misses++;
+					break;
+			}
             pthread_mutex_unlock(&c->thread->stats.mutex);
 
             write_bin_error(c, PROTOCOL_BINARY_RESPONSE_KEY_ENOENT, 0);
@@ -2579,6 +2585,8 @@ static void server_stats(ADD_STAT add_stats, conn *c) {
     APPEND_STAT("incr_hits", "%llu", (unsigned long long)slab_stats.incr_hits);
     APPEND_STAT("decr_misses", "%llu", (unsigned long long)thread_stats.decr_misses);
     APPEND_STAT("decr_hits", "%llu", (unsigned long long)slab_stats.decr_hits);
+    APPEND_STAT("mult_misses", "%llu", (unsigned long long)thread_stats.mult_misses);
+    APPEND_STAT("mult_hits", "%llu", (unsigned long long)slab_stats.mult_hits);
     APPEND_STAT("cas_misses", "%llu", (unsigned long long)thread_stats.cas_misses);
     APPEND_STAT("cas_hits", "%llu", (unsigned long long)slab_stats.cas_hits);
     APPEND_STAT("cas_badval", "%llu", (unsigned long long)slab_stats.cas_badval);
