@@ -931,6 +931,7 @@ static void validate_response_header(protocol_binary_response_no_extras *respons
 
         case PROTOCOL_BINARY_CMD_DECREMENT:
         case PROTOCOL_BINARY_CMD_INCREMENT:
+        case PROTOCOL_BINARY_CMD_MULT:
             assert(response->message.header.response.keylen == 0);
             assert(response->message.header.response.extlen == 0);
             assert(response->message.header.response.bodylen == 8);

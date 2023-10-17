@@ -14,6 +14,7 @@
  *      Brad Fitzpatrick <brad@danga.com>
  */
 #include "memcached.h"
+#include "protocol_binary.h"
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -1067,14 +1068,14 @@ static void complete_incr_bin(conn *c) {
     }
 	enum arithmetic_op op;
 	switch (c->cmd) {
+		case PROTOCOL_BINARY_CMD_MULT:
+			op = arithm_op_mult;
+			break;
 		case PROTOCOL_BINARY_CMD_INCREMENT:
 			op = arithm_op_incr;
 			break;
-		case PROTOCOL_BINARY_CMD_DECREMENT:
+		default: //case PROTOCOL_BINARY_CMD_DECREMENT:
 			op = arithm_op_decr;
-			break;
-		case PROTOCOL_BINARY_CMD_MULT:
-			op = arithm_op_mult;
 			break;
 	}
 
@@ -1842,6 +1843,9 @@ static void dispatch_bin_command(conn *c) {
     case PROTOCOL_BINARY_CMD_INCREMENTQ:
         c->cmd = PROTOCOL_BINARY_CMD_INCREMENT;
         break;
+    case PROTOCOL_BINARY_CMD_MULTQ:
+        c->cmd = PROTOCOL_BINARY_CMD_MULT;
+        break;
     case PROTOCOL_BINARY_CMD_DECREMENTQ:
         c->cmd = PROTOCOL_BINARY_CMD_DECREMENT;
         break;
@@ -1923,6 +1927,7 @@ static void dispatch_bin_command(conn *c) {
             break;
         case PROTOCOL_BINARY_CMD_INCREMENT:
         case PROTOCOL_BINARY_CMD_DECREMENT:
+        case PROTOCOL_BINARY_CMD_MULT:
             if (keylen > 0 && extlen == 20 && bodylen == (keylen + extlen)) {
                 bin_read_key(c, bin_reading_incr_header, 20);
             } else {
