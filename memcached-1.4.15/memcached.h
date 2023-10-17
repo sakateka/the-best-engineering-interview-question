@@ -168,6 +168,12 @@ enum bin_substates {
     bin_reading_touch_key,
 };
 
+enum arithmetic_op {
+	arithm_op_incr,
+	arithm_op_decr,
+	arithm_op_mult,
+};
+
 enum protocol {
     ascii_prot = 3, /* arbitrary value. */
     binary_prot,
@@ -214,6 +220,7 @@ struct slab_stats {
     uint64_t  cas_hits;
     uint64_t  cas_badval;
     uint64_t  incr_hits;
+    uint64_t  mult_hits;
     uint64_t  decr_hits;
 };
 
@@ -228,6 +235,7 @@ struct thread_stats {
     uint64_t          touch_misses;
     uint64_t          delete_misses;
     uint64_t          incr_misses;
+    uint64_t          mult_misses;
     uint64_t          decr_misses;
     uint64_t          cas_misses;
     uint64_t          bytes_read;
@@ -481,7 +489,7 @@ extern struct slab_rebalance slab_rebal;
  */
 void do_accept_new_conns(const bool do_accept);
 enum delta_result_type do_add_delta(conn *c, const char *key,
-                                    const size_t nkey, const bool incr,
+                                    const size_t nkey, const enum arithmetic_op op,
                                     const int64_t delta, char *buf,
                                     uint64_t *cas, const uint32_t hv);
 enum store_item_type do_store_item(item *item, int comm, conn* c, const uint32_t hv);
@@ -517,7 +525,7 @@ void dispatch_conn_new(int sfd, enum conn_states init_state, int event_flags, in
 
 /* Lock wrappers for cache functions that are called from main loop. */
 enum delta_result_type add_delta(conn *c, const char *key,
-                                 const size_t nkey, const int incr,
+                                 const size_t nkey, const enum arithmetic_op op,
                                  const int64_t delta, char *buf,
                                  uint64_t *cas);
 void accept_new_conns(const bool do_accept);

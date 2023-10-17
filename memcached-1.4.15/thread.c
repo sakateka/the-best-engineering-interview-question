@@ -574,7 +574,7 @@ void item_update(item *item) {
  * Does arithmetic on a numeric item value.
  */
 enum delta_result_type add_delta(conn *c, const char *key,
-                                 const size_t nkey, int incr,
+                                 const size_t nkey, const enum arithmetic_op op,
                                  const int64_t delta, char *buf,
                                  uint64_t *cas) {
     enum delta_result_type ret;
@@ -582,7 +582,7 @@ enum delta_result_type add_delta(conn *c, const char *key,
 
     hv = hash(key, nkey, 0);
     item_lock(hv);
-    ret = do_add_delta(c, key, nkey, incr, delta, buf, cas, hv);
+    ret = do_add_delta(c, key, nkey, op, delta, buf, cas, hv);
     item_unlock(hv);
     return ret;
 }

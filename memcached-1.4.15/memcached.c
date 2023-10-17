@@ -1065,9 +1065,20 @@ static void complete_incr_bin(conn *c) {
     if (c->binary_header.request.cas != 0) {
         cas = c->binary_header.request.cas;
     }
-    switch(add_delta(c, key, nkey, c->cmd == PROTOCOL_BINARY_CMD_INCREMENT,
-                     req->message.body.delta, tmpbuf,
-                     &cas)) {
+	enum arithmetic_op op;
+	switch (c->cmd) {
+		case PROTOCOL_BINARY_CMD_INCREMENT:
+			op = arithm_op_incr;
+			break;
+		case PROTOCOL_BINARY_CMD_DECREMENT:
+			op = arithm_op_decr;
+			break;
+		case PROTOCOL_BINARY_CMD_MULT:
+			op = arithm_op_mult;
+			break;
+	}
+
+    switch(add_delta(c, key, nkey, op, req->message.body.delta, tmpbuf, &cas)) {
     case OK:
         rsp->message.body.value = htonll(strtoull(tmpbuf, NULL, 10));
         if (cas) {
@@ -2989,7 +3000,7 @@ static void process_touch_command(conn *c, token_t *tokens, const size_t ntokens
     }
 }
 
-static void process_arithmetic_command(conn *c, token_t *tokens, const size_t ntokens, const bool incr) {
+static void process_arithmetic_command(conn *c, token_t *tokens, const size_t ntokens, const enum arithmetic_op op) {
     char temp[INCR_MAX_STORAGE_LEN];
     uint64_t delta;
     char *key;
@@ -3012,7 +3023,7 @@ static void process_arithmetic_command(conn *c, token_t *tokens, const size_t nt
         return;
     }
 
-    switch(add_delta(c, key, nkey, incr, delta, temp, NULL)) {
+    switch(add_delta(c, key, nkey, op, delta, temp, NULL)) {
     case OK:
         out_string(c, temp);
         break;
@@ -3024,11 +3035,17 @@ static void process_arithmetic_command(conn *c, token_t *tokens, const size_t nt
         break;
     case DELTA_ITEM_NOT_FOUND:
         pthread_mutex_lock(&c->thread->stats.mutex);
-        if (incr) {
-            c->thread->stats.incr_misses++;
-        } else {
-            c->thread->stats.decr_misses++;
-        }
+		switch(op){
+			case arithm_op_incr:
+				c->thread->stats.incr_misses++;
+				break;
+			case arithm_op_decr:
+				c->thread->stats.decr_misses++;
+				break;
+			case arithm_op_mult:
+				c->thread->stats.mult_misses++;
+				break;
+		}
         pthread_mutex_unlock(&c->thread->stats.mutex);
 
         out_string(c, "NOT_FOUND");
@@ -3050,7 +3067,7 @@ static void process_arithmetic_command(conn *c, token_t *tokens, const size_t nt
  * returns a response string to send back to the client.
  */
 enum delta_result_type do_add_delta(conn *c, const char *key, const size_t nkey,
-                                    const bool incr, const int64_t delta,
+                                    const enum arithmetic_op op, const int64_t delta,
                                     char *buf, uint64_t *cas,
                                     const uint32_t hv) {
     char *ptr;
@@ -3075,23 +3092,36 @@ enum delta_result_type do_add_delta(conn *c, const char *key, const size_t nkey,
         return NON_NUMERIC;
     }
 
-    if (incr) {
-        value += delta;
-        MEMCACHED_COMMAND_INCR(c->sfd, ITEM_key(it), it->nkey, value);
-    } else {
-        if(delta > value) {
-            value = 0;
-        } else {
-            value -= delta;
-        }
-        MEMCACHED_COMMAND_DECR(c->sfd, ITEM_key(it), it->nkey, value);
+	switch(op){
+		case arithm_op_incr:
+			value += delta;
+			MEMCACHED_COMMAND_INCR(c->sfd, ITEM_key(it), it->nkey, value);
+			break;
+		case arithm_op_decr:
+			if(delta > value) {
+				value = 0;
+			} else {
+				value -= delta;
+			}
+			MEMCACHED_COMMAND_DECR(c->sfd, ITEM_key(it), it->nkey, value);
+			break;
+		case arithm_op_mult:
+			value *= delta;
+			MEMCACHED_COMMAND_MULT(c->sfd, ITEM_key(it), it->nkey, value);
+			break;
     }
 
     pthread_mutex_lock(&c->thread->stats.mutex);
-    if (incr) {
-        c->thread->stats.slab_stats[it->slabs_clsid].incr_hits++;
-    } else {
-        c->thread->stats.slab_stats[it->slabs_clsid].decr_hits++;
+	switch(op){
+		case arithm_op_incr:
+			c->thread->stats.slab_stats[it->slabs_clsid].incr_hits++;
+			break;
+		case arithm_op_decr:
+			c->thread->stats.slab_stats[it->slabs_clsid].decr_hits++;
+			break;
+		case arithm_op_mult:
+			c->thread->stats.slab_stats[it->slabs_clsid].mult_hits++;
+			break;
     }
     pthread_mutex_unlock(&c->thread->stats.mutex);
 
@@ -3263,7 +3293,11 @@ static void process_command(conn *c, char *command) {
 
     } else if ((ntokens == 4 || ntokens == 5) && (strcmp(tokens[COMMAND_TOKEN].value, "incr") == 0)) {
 
-        process_arithmetic_command(c, tokens, ntokens, 1);
+        process_arithmetic_command(c, tokens, ntokens, arithm_op_incr);
+
+    } else if ((ntokens == 4 || ntokens == 5) && (strcmp(tokens[COMMAND_TOKEN].value, "mult") == 0)) {
+
+        process_arithmetic_command(c, tokens, ntokens, arithm_op_mult);
 
     } else if (ntokens >= 3 && (strcmp(tokens[COMMAND_TOKEN].value, "gets") == 0)) {
 
@@ -3271,7 +3305,7 @@ static void process_command(conn *c, char *command) {
 
     } else if ((ntokens == 4 || ntokens == 5) && (strcmp(tokens[COMMAND_TOKEN].value, "decr") == 0)) {
 
-        process_arithmetic_command(c, tokens, ntokens, 0);
+        process_arithmetic_command(c, tokens, ntokens, arithm_op_decr);
 
     } else if (ntokens >= 3 && ntokens <= 5 && (strcmp(tokens[COMMAND_TOKEN].value, "delete") == 0)) {
 
@@ -4617,8 +4651,8 @@ static void sig_handler(const int sig) {
     exit(EXIT_SUCCESS);
 }
 
-#ifndef HAVE_SIGIGNORE
-static int sigignore(int sig) {
+// #ifndef HAVE_SIGIGNORE
+static int sigignore_own(int sig) {
     struct sigaction sa = { .sa_handler = SIG_IGN, .sa_flags = 0 };
 
     if (sigemptyset(&sa.sa_mask) == -1 || sigaction(sig, &sa, 0) == -1) {
@@ -4626,7 +4660,7 @@ static int sigignore(int sig) {
     }
     return 0;
 }
-#endif
+// #endif
 
 
 /*
@@ -5099,7 +5133,7 @@ int main (int argc, char **argv) {
     /* daemonize if requested */
     /* if we want to ensure our ability to dump core, don't chdir to / */
     if (do_daemonize) {
-        if (sigignore(SIGHUP) == -1) {
+        if (sigignore_own(SIGHUP) == -1) {
             perror("Failed to ignore SIGHUP");
         }
         if (daemonize(maxcore, settings.verbose) == -1) {
@@ -5134,7 +5168,7 @@ int main (int argc, char **argv) {
      * ignore SIGPIPE signals; we can use errno == EPIPE if we
      * need that information
      */
-    if (sigignore(SIGPIPE) == -1) {
+    if (sigignore_own(SIGPIPE) == -1) {
         perror("failed to ignore SIGPIPE; sigaction");
         exit(EX_OSERR);
     }
